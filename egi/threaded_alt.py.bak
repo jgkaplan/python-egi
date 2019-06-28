@@ -5,13 +5,19 @@
 
     A threaded implementation of the "egi.netstation" component .
 
+    (This variant of the threaded implementation is a bit more complicated,
+      and a bit more messy -- but may be easier to support, as the method names
+      from the " internal EGI.Netstation class " are wrapped automatically
+      in the local Netstation wrapper class definition . )
+
+
 """
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 
-from . import simple as internal # Netstation object, mostly
-from .socket_wrapper import Socket
+import simple as internal # Netstation object, mostly
+from socket_wrapper import Socket
 
 #
 # "forward" these names to be used from outside
@@ -26,14 +32,14 @@ ms_localtime = internal.ms_localtime
 
 ## _Netstation = internal.Netstation
 
-## import types # MethodType, FunctionType
+import types # MethodType, FunctionType
 ## import inspect # .ismethod()
-## from StringIO import StringIO
+from StringIO import StringIO
 
 # -----------------------------------------------------------------------------
 
 from threading import Thread
-from queue import Queue
+from Queue import Queue
 
 import time # time() for 'soft timeouts'
 
@@ -56,7 +62,7 @@ class _Command:
 
     # (1) " packing ":
 
-    def __init__(self, method_name, kwargs=None):
+    def __init__(self, method_name, kwargs = None):
 
         if kwargs is None:  kwargs = {}
 
@@ -242,7 +248,7 @@ class Netstation:
 
         n_available = self._to_receive.qsize()
 
-        for i in range(n_available):
+        for i in xrange(n_available):
 
             data = self._get()
             yield data
@@ -254,8 +260,8 @@ class Netstation:
 
 
     # a simple 'dummy processor' made for convenience
-    ## def process_responces(self, resp_handler = lambda resp: pass):
-    def process_responces(self):
+    ## def process_responses(self, resp_handler = lambda resp: pass):
+    def process_responses(self):
 
         for resp in self.enumerate_responses():
 
@@ -322,15 +328,194 @@ class Netstation:
         # we'll probably want to handle the exception in the 'postman' thread
         while (time.time() - t_start) < seconds_timeout:
 
-            self.process_responces()
+            self.process_responses()
 
         # debug
-        print(" egi: stopping ... ")
+        print " egi: stopping ... "
 
         ## self._disconnect()
 
+        # del self._to_send
+        # del self._to_receive
+
+        # del _netstation_thread
 
     ## -----------------------------------------------------------
+    ## -----------------------------------------------------------
+
+    #
+    # may be at some moment we should replace the repetitive code below
+    # to a getattr()-based code (alternatives: (a) "on-the-fly patching",
+    # (b) metaclasses, (c) exec statement and may be more ;)
+    #
+    # (a) "static is better than dynamic" in the terms of execution cost ;
+    # (b) "simple is better than complex")
+    # (c) "explicit is better than implicit" -- i.e. "it is better to have clear syntax highlighting"
+    #
+    # // finally preferred the exec way for the sake of easy ipython usage)
+
+    # don't pollute the namespace too much
+    local_names = locals().keys()
+
+    from fwhelper import FunctionWrappingHelper as FWH
+
+    # a shortcut
+    _NS = internal.Netstation
+
+    ## for name, value in _Netstation.__dict__.iteritems():
+    for name in _NS.__dict__.iterkeys():
+
+        value = getattr(_NS, name)
+
+        ## # debug
+        ## print name, value, type(value), \
+        ##       callable(value), isinstance(value, (types.FunctionType, types.MethodType)), \
+        ##       inspect.ismethod(value)
+
+        if name.startswith('_'): continue
+        '''
+        if type(value) is not types.FunctionType \
+        and type(value) is not types.St: continue
+        '''
+        ## if not isinstance(value, (types.FunctionType, types.MethodType)): continue
+        if not callable(value): continue
+
+        # do not want to replace any of the existing names
+        ## could actually have "forwarded" names from a predefined list
+
+        if name in local_names: continue
+
+        #
+        # simple form of what we want to simulate goes below
+        #
+
+        '''
+        def BeginSession(self):
+            """ say 'hi!' to the server """
+
+            packet = _Command('BeginSession')
+            # return self._process(packet)
+            self._put(packet)
+
+        '''
+
+        #
+        # a more complicated xample of the internal code:
+        #
+
+        '''
+
+        kwargs = {                             \
+                   'key'        : key         ,
+                   'timestamp'  : timestamp   ,
+                   'label'      : label       ,
+                   'description': description ,
+                   'table'      : table       ,
+                   'pad'        : pad         \
+                }
+
+        packet = _Command('send_event', kwargs)
+        self._put(packet)
+
+        '''
+
+        # else: ## start generating the call
+
+        fwh = FWH(value)
+
+        #
+        # the declaration
+        #
+
+        header = StringIO()
+        header.write('def %s(' % (name,))
+        for entry in fwh.enum_argentries(b_all = True):
+
+            ## if entry == 'self': continue
+            header.write('%s, ' % (entry,))
+
+
+        header.write('):\n')
+        # "a bit of pretty-printing"
+        header.write('\n')
+
+        header = header.getvalue()
+
+        #
+        # the helpstring
+        #
+
+        helpstr = getattr(value, '__doc__', None)
+
+        #
+        # the call
+        #
+
+        call = StringIO()
+
+        # put the helpstring
+        if helpstr: call.write('"""%s"""\n\n' % (helpstr,))
+
+        if fwh.nargs() > 1:  # do we have "non-self" arguments ?
+
+            call.write('kwargs = {')
+            # at the moment we do not pass 'kwargs through kwargs' (" { ... , '*kwargs': kwargs } " ? kwargs_old.update(kwargs_new) ? )
+            for entry in fwh.enum_argentries(b_no_default_values = True, b_all = False):
+
+                if entry == 'self': continue
+                call.write("'%s': %s, " % (entry, entry))
+
+            call.write(' }\n')
+
+            # "a bit of pretty-printing"
+            call.write('\n')
+
+            call.write("packet = _Command('%s', kwargs)\n" % (name))
+
+        else:  # no non-trivial arguments present
+
+            call.write("packet = _Command('%s')\n" % (name))
+
+        call.write("self._put(packet) \n")
+        # "a bit of pretty-printing"
+        call.write('\n')
+
+        call.seek(0)
+
+        # indent
+
+        call_ = StringIO()
+        for line in call.readlines():
+            call_.write('\t' + line)
+        call_.write('\n')
+
+        call_ = call_.getvalue()
+
+        code = header + call_
+        exec code
+
+        ## # debug
+        ## print code
+
+        # clean things
+        # # probably should check locals(), add the name-s, then clean all the rest
+
+        ## del code, line, call_, call, entry, header, fwh, value, name
+        ## del code, line, call_, call, header ## fwh, value, name
+
+        local_names.append(name)
+
+    # del code, line, call_, call, entry, header, fwh, value, name
+    extended_ = locals().keys()
+    # here 'v' stands for "var", not for "vendetta"
+    delete_ = [ v for v in extended_ if v not in local_names ]
+    for v in delete_: exec "del %s" % (v,)
+    del delete_, v
+
+
+    '''
+    ## -----------------------------------------------------------
+
 
     def BeginSession(self):
         """ say 'hi!' to the server """
@@ -450,6 +635,7 @@ class Netstation:
 
     ## -----------------------------------------------------------
 
+    '''
 
 
 # -----------------------------------------------------------------------------
@@ -457,9 +643,9 @@ class Netstation:
 
 if __name__ == "__main__":
 
-    print(__doc__)
-    print("\n === \n")
+    print __doc__
+    print "\n === \n"
     # print "module dir() listing: ", __dict__.keys()
-    print("module dir() listing: ", dir())
+    print "module dir() listing: ", dir()
 
 

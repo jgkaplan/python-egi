@@ -1,5 +1,3 @@
-
-
 # standard
 from __future__ import print_function, division
 import inspect
@@ -126,7 +124,7 @@ class FunctionWrappingHelper(object):
 
     def dump(self):
         """ [debug] dump the function info to stdout """
-
+        
         print '\n\n---\n\n', self.name, ':'
         for entry in self.enum_argentries(True):
 
@@ -159,10 +157,3 @@ if __name__ == "__main__":
         print '\n\n---\n\n', w.name, ':'
         for entry in w.enum_argentries(b_all = True):
             print '\t', entry, ','
-
-
-
-
-
-
-

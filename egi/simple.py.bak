@@ -1,7 +1,7 @@
 
 # standard
-
-from .socket_wrapper import Socket
+from __future__ import print_function, division
+from socket_wrapper import Socket
 import struct
 import math
 import time
@@ -344,7 +344,7 @@ class _DataFormat(object):
             # also integers are 64-bit on 64-bit Unix, so we have to  check their size,
             # see the 'check_table' below
             type(1): ('long', '=l'),  # '=' -- translation is: four bytes
-            type(1): ('long', '=l'),  # '=' -- translation is: four bytes
+            type(1L): ('long', '=l'),  # '=' -- translation is: four bytes
             # type(1.0): ('doub', '=d'),  # " 64 bit I3E floating-point number "
             ## temp test
             ## type(1.0): ('sing', '=f'),  # " 64 bit I3E floating-point number "
@@ -362,7 +362,7 @@ class _DataFormat(object):
         self._check_table = {
             # type(1L):  lambda x: int(x), # if this fails then the next attempt would have probably been do
             type(1): is_32_bit_int_compatible,
-            type(1): is_32_bit_int_compatible,
+            type(1L): is_32_bit_int_compatible,
         }
 
     def _get_hints(self, data):
@@ -418,7 +418,7 @@ class _DataFormat(object):
             Note that for the latter case the uniqueness of the generated key ids is not quaranteed .
         """
 
-        keys, values = list(zip(*list(table.items())))
+        keys, values = zip(*table.items())
 
         ## #debug
         ## print "_pack_dict(): keys; values",  keys,  values
@@ -434,12 +434,12 @@ class _DataFormat(object):
         # 4-byte condition check
         if not pad:
             # "try" ...
-            list(map(EgiError.check_type, keys))
-            list(map(EgiError.check_len, keys))
+            map(EgiError.check_type, keys)
+            map(EgiError.check_len, keys)
 
         else: # else convert to string and truncate or pad
 
-            for i in range(len(keys)):
+            for i in xrange(len(keys)):
 
                 k = keys[i]
                 if type(k) != type(''):
@@ -464,7 +464,7 @@ class _DataFormat(object):
 
         nkeys_str = struct.pack('=B', nkeys)
 
-        values_packed = list(map(self._pack_data, values))
+        values_packed = map(self._pack_data, values)
 
         items_packed = [nkeys_str, ] * (2 * nkeys + 1)
         items_packed[1::2] = keys[:]
@@ -562,7 +562,7 @@ class _DataFormat(object):
         label_str = pstring(label)
         description_str = pstring(description)
 
-        if table is None or len(list(table.keys())) <= 0:
+        if table is None or len(table.keys()) <= 0:
             # explicitly state that the number of keys is zero (see above comment)
             table_str = struct.pack('B', 0)
         else:

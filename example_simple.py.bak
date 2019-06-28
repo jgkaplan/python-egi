@@ -21,10 +21,9 @@
 """
 
 import egi.simple as egi
-import importlib
 ## import egi.threaded as egi
 # make the script reenterable )     
-importlib.reload(egi)     
+reload(egi)     
 
 import sys # sys.argv[]     
 import time # time.time()     
